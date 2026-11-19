@@ -1029,7 +1029,8 @@ def scene_koi():
         wob = f"3 * sin({T} * {K1_5} + {i})"
         imgs.append(Img(f"koi_{i}", F, f'<Transform target="angle" value="{ang.format(T=T)} + {wob}" />',
                         x=cx - 40, y=cy - hs * PX, attrs=' pivotX="0.5" pivotY="1"'))
-        blit(flat, koi_sprite(body, patch, seed, facing), (cx - 40) // PX, (cy - hs * PX) // PX)
+        ax, ay = [(26, 66), (60, 84), (66, 48)][i]          # always-on: spread round the pond, not stacked
+        blit(flat, koi_sprite(body, patch, seed, facing), ax, ay)
     S.extra["fish"] = flat
     S.add("koi", 7, *imgs)
 
