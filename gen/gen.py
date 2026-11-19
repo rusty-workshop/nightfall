@@ -1316,8 +1316,8 @@ def clock_xml(font):
 
 AUTO = '[CONFIGURATION.auto] == "TRUE"'
 SCHEDULE = [   # Auto scene: (scene, from hour, to hour) - local time, 24h
-    ("meadow", 5, 16), ("dunes", 16, 18),
-    ("lighthouse", 18, 20), ("neon", 20, 22), ("lake", 22, 2), ("frost", 2, 5),
+    ("meadow", 6, 12), ("dunes", 12, 17), ("lighthouse", 17, 20),
+    ("neon", 20, 23), ("lake", 23, 3), ("frost", 3, 6),
 ]
 
 

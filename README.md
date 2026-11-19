@@ -20,8 +20,8 @@ font for the clock. No code inside: it's a Watch Face Format v2 package (XML + P
 ## Options (long-press the face, then Customize)
 
 - **Scene**: pick one of the six.
-- **Auto scene (time of day)**: ignore the picked scene and follow the clock: Meadow 5-16, Dunes 16-18,
-  Lighthouse 18-20, Neon city 20-22, Lake 22-2, Aurora 2-5. Edit `SCHEDULE` in `gen/gen.py` to change it.
+- **Auto scene (time of day)**: ignore the picked scene and follow the clock: Meadow 6-12, Dunes 12-17,
+  Lighthouse 17-20, Neon city 20-23, Lake 23-3, Aurora 3-6. Edit `SCHEDULE` in `gen/gen.py` to change it.
 - **Live weather** (on by default): the scene follows the weather on your watch. Clouds roll in when it's cloudy, fog
   sits on the horizon, rain or snow falls, storms flash, and wind blows streaks across. Scenes with weather built in
   (Neon's rain, Aurora's snow, Dunes' sand) only show it when the real weather matches.
