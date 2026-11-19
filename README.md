@@ -7,8 +7,8 @@ font for the clock. No code inside: it's a Watch Face Format v2 package (XML + P
 | Lake | Aurora | Neon city | Dunes |
 |---|---|---|---|
 | ![](docs/preview_lake.png) | ![](docs/preview_frost.png) | ![](docs/preview_neon.png) | ![](docs/preview_dunes.png) |
-| **Lighthouse** | **Meadow** | | |
-| ![](docs/preview_lighthouse.png) | ![](docs/preview_meadow.png) | | |
+| **Lighthouse** | **Meadow** | **Sky islands** | |
+| ![](docs/preview_lighthouse.png) | ![](docs/preview_meadow.png) | ![](docs/preview_sky.png) | |
 
 - **Lake**: ringed planet over a lake. Twinkling stars, drifting clouds, a shooting star at :00 and :30, water shimmer, fireflies.
 - **Aurora**: northern lights over snowy peaks. Rippling aurora, snow in two depths, a cabin with a flickering window and chimney smoke.
@@ -16,12 +16,14 @@ font for the clock. No code inside: it's a Watch Face Format v2 package (XML + P
 - **Dunes**: retro sunset over the desert. Birds, drifting clouds, blowing sand.
 - **Lighthouse**: dusk on the coast. The beam turns in 3D (it stretches, flips sides and flares when it faces you), a boat and gulls pass, waves foam on the rocks.
 - **Meadow**: a sunny morning. Two wind turbines turn, a hot-air balloon drifts over, butterflies flutter, grass sways.
+- **Sky islands**: grassy islands float over a sea of clouds, each bobbing at its own depth. A waterfall pours off the
+  edge, an airship and a flock of birds pass, and the clouds roll by below.
 
 ## Options (long-press the face, then Customize)
 
-- **Scene**: pick one of the six.
-- **Auto scene (time of day)**: ignore the picked scene and follow the clock: Meadow 6-12, Dunes 12-17,
-  Lighthouse 17-20, Neon city 20-23, Lake 23-3, Aurora 3-6. Edit `SCHEDULE` in `gen/gen.py` to change it.
+- **Scene**: pick one of the seven.
+- **Auto scene (time of day)**: ignore the picked scene and follow the clock: Meadow 6-10, Sky islands 10-14,
+  Dunes 14-17, Lighthouse 17-20, Neon city 20-23, Lake 23-3, Aurora 3-6. Edit `SCHEDULE` in `gen/gen.py` to change it.
 - **Live weather** (on by default): the scene follows the weather on your watch. Clouds roll in when it's cloudy, fog
   sits on the horizon, rain or snow falls, storms flash, and wind blows streaks across. Scenes with weather built in
   (Neon's rain, Aurora's snow, Dunes' sand) only show it when the real weather matches.

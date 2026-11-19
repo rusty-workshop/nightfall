@@ -1032,6 +1032,121 @@ def scene_meadow():
     return S
 
 
+# ================================================================ scene 7: Sky islands (sunny, floating islands)
+def island(L, cx, top, hw, depth, seed, grass=("#5ac85a", "#8ae06a"), rock=("#8a8aa8", "#6a6a8a", "#4a4a68"),
+           dirt="#8a5a3a"):
+    """A floating island: grassy top, dirt band, rock underside tapering to a jagged point."""
+    rnd = random.Random(seed)
+    rock = pal(*rock)
+    for x in range(cx - hw, cx + hw + 1):
+        u = abs(x - cx) / hw
+        t = top + int(round(0.8 * math.sin(x * 0.7 + seed)))
+        bot = top + int(depth * (1 - u ** 1.6)) + rnd.randint(0, 2)
+        for y in range(t, bot + 1):
+            d = y - t
+            if d == 0:
+                c = hexc(grass[1])
+            elif d < 2:
+                c = hexc(grass[0])
+            elif d < 4:
+                c = hexc(dirt)
+            else:
+                c = ramp(rock, 0.15 + (x - (cx - hw)) / (2 * hw) * 0.7 + (d / depth) * 0.3, x, y)  # lit from the left
+            L.set(x, y, c)
+        if rnd.random() < 0.25 and u < 0.95:              # hanging vines
+            for i in range(rnd.randint(1, 4)):
+                L.set(x, t + 3 + i, hexc("#3e9a3e"))
+    return L
+
+
+def scene_skyislands():
+    S = Scene("sky", "Sky islands")
+    S.horizon, S.rain_col, S.fog_col = 84, "#d0dcff", "#eef4ff"
+    S.cloud_cols = ("#c8ccd8", "#9aa0b4", "#7a8098")
+    S.add("sky", 3, Img("sky", sky(pal("#1e4ab8", "#2a5ac8", "#3a6cd4", "#5084dc", "#6c9ce4", "#8ab4ea",
+                                       "#a8ccf0", "#c4dcf4", "#dceaf8"), 92)))
+    SU = Layer()
+    halo(SU, 84, 22, 5, "#fff6c8", 120, 7)
+    for x, y in disk(84, 22, 5):
+        SU.set(x, y, ramp(pal("#fffef0", "#fff4b0", "#ffe680"), (y - 17) / 10, x, y))
+    S.add("sun", 5, Img("sun", SU))
+    S.marker("wx_sky")
+
+    # distant islands, hazy blue (aerial perspective), bobbing slowly
+    FA = Layer()
+    haze = dict(grass=("#9ac0d8", "#b4d4e4"), rock=("#a8bcd8", "#94aacc", "#8098c0"), dirt="#9ab0cc")
+    island(FA, 16, 50, 6, 8, 3, **haze)
+    island(FA, 90, 46, 5, 7, 4, **haze)
+    bob = lambda amp, ph, k=K15: f'<Transform target="y" value="@BY@ + {amp} * sin({T} * {k} + {ph})" />'
+    S.add("far", 8, Img("far_isles", FA, bob(2, 0)))
+
+    airship = sprite(["....aaaaaaaaaa....", "..aaabbbbbbbbaaa..", ".aabbbbbbbbbbbbaaf", "aabbbbbbbbbbbbbaff",
+                      ".aaaaaaaaaaaaaaaaf", "......kkkkk.......", ".......kkk..p....."],
+                     {"a": hexc("#a8a8c0"), "b": hexc("#dcdcec"), "f": hexc("#c84a4a"), "k": hexc("#7a4a2a"),
+                      "p": hexc("#4a4a5a")})
+    S.add("airship", 10, Img("airship", airship, f'<Transform target="x" value="560 - {T} * 11" />'
+                                                 f'<Transform target="y" value="200 + 5 * sin({T} * {K10})" />',
+                             preview=False, calm="hide"))
+    S.marker("wx_fog")
+
+    # right island with a pine
+    RI = island(Layer(), 80, 58, 10, 13, 5)
+    pine(RI, 78, 57, 11, hexc("#2e7a3a"), rim=hexc("#5aa85a"))
+    pine(RI, 84, 57, 7, hexc("#2e7a3a"), rim=hexc("#5aa85a"))
+    S.add("isle_right", 13, Img("isle_right", RI, bob(3, 1.3)))
+
+    # main island: cottage, tree, waterfall off the right edge
+    cx, top, hw = 38, 64, 18
+    MI = island(Layer(), cx, top, hw, 22, 6)
+    hx = cx - 9                                                # cottage
+    MI.rect(hx, top - 5, hx + 7, top, hexc("#f0e6d0"))
+    MI.rect(hx + 1, top - 3, hx + 3, top - 1, hexc("#6ab0e0"))
+    MI.rect(hx + 4, top - 4, hx + 6, top, hexc("#8a5a3a"))
+    for i in range(4):
+        MI.rect(hx - 1 + i, top - 6 - i, hx + 8 - i, top - 5 - i, hexc("#d84a3a" if i < 3 else "#b83a2e"))
+    tx = cx + 6                                                # round tree
+    MI.rect(tx, top - 4, tx + 1, top, hexc("#6a4a2a"))
+    for x, y in disk(tx, top - 7, 3):
+        MI.set(x, y, hexc("#3e9a3e" if (x + y) % 3 else "#5ab84a"))
+    wx0, wy0, wl = cx + hw - 4, top + 1, 26                   # waterfall: 3 frames, cycled
+
+    def fall_frame(f):
+        L = Layer()
+        for y in range(wy0, wy0 + wl):
+            for x in range(wx0, wx0 + 3):
+                if (y + f * 2 + x) % 3:
+                    L.set(x, y, hexc("#e8f6ff" if (y + f) % 4 else "#a8d4f4", 230 if y < wy0 + wl - 6 else 140))
+        for x, y in disk(wx0 + 1, wy0 + wl, 3):                # mist where it meets the clouds
+            if L.get(x, y) is None:
+                L.set(x, y, hexc("#ffffff", 120))
+        return L
+    S.add("isle_main", 17, Img("isle_main", MI, bob(3, 2.6)),
+          Img("fall_0", fall_frame(0), bob(3, 2.6) + blink(0, 0.15, 3)),
+          Img("fall_1", fall_frame(1), bob(3, 2.6) + blink(1, 0.15, 3), preview=False, calm="hide"),
+          Img("fall_2", fall_frame(2), bob(3, 2.6) + blink(2, 0.15, 3), preview=False, calm="hide"))
+
+    up = ["#...#", ".#.#.", "..#.."]
+    dn = [".....", ".###.", "#...#"]
+    flock = lambda rows: blit(blit(blit(Layer(20, 9), sprite(rows, {"#": hexc("#2a3a5a")}), 0, 4),
+                                   sprite(rows, {"#": hexc("#2a3a5a")}), 7, 0), sprite(rows, {"#": hexc("#2a3a5a")}), 14, 5)
+    fly = (f'<Transform target="x" value="{T} * 10 - 100" />'
+           f'<Transform target="y" value="250 + 6 * sin({T} * {K3})" />')
+    S.add("birds", 20, Img("bird_up", flock(up), fly + blink(0, 0.3), preview=False),
+          Img("bird_dn", flock(dn), fly + blink(1, 0.3), preview=False))
+
+    # sea of clouds below: seamless, scrolls
+    CS = Layer(2 * G, G)
+    for x in range(2 * G):
+        u = 2 * math.pi * (x % G) / G
+        t = int(84 - 3 * abs(math.sin(6 * u)) - 2 * abs(math.sin(11 * u + 1)) - 1.5 * math.sin(2 * u))
+        for y in range(t, G):
+            CS.set(x, y, ramp(pal("#ffffff", "#eef4fc", "#d4e2f4", "#bccfe8"), (y - t) / 14, x, y))
+    S.add("cloudsea", 22, Img("cloudsea", CS, scroll_x(), w=2 * SIZE))
+    S.add("wisps", 28, Img("wisps", clouds([(94, 1.6, 0.5, (2, 0.9), (5, 0.6))], hexc("#ffffff", 230),
+                                            hexc("#f2f6fc", 220), hexc("#dce6f4", 210)), scroll_x(2), w=2 * SIZE))
+    return S
+
+
 # ================================================================ live weather overlays
 def fog_layer(S):
     L = Layer(2 * G, G)
@@ -1104,7 +1219,7 @@ def add_weather(S):
     S.groups = groups + [(n, d, ims) for (n, d), ims in merged.items()]
 
 
-SCENES = [scene_lake, scene_frost, scene_neon, scene_dunes, scene_lighthouse, scene_meadow]
+SCENES = [scene_lake, scene_frost, scene_neon, scene_dunes, scene_lighthouse, scene_meadow, scene_skyislands]
 
 
 # ================================================================ pixel font
@@ -1275,6 +1390,8 @@ AOD_STYLE = {   # scene -> (clock tint, outline specs nearest-first, extras)
     "lighthouse": ("#ffe6a0", [("cliff", "#35355e"), ("moon", "#8e88b8", "outline"), ("sea", "#2c3462")],
                    [("cliff", lambda c: c[0] > 240 and c[1] > 220 and c[2] < 200, "#b89448", 1),
                     ("stars_a", WHITEISH, "#4a5070", 2)]),
+    "sky": ("#bfe8ff", [("isle_main", "#5a7a9a", "outline"), ("isle_right", "#4a6a8a", "outline"),
+                        ("cloudsea", "#4a5a7a"), ("sun", "#a8a070", "outline")], []),
     "meadow": ("#fff0b0", [("near", "#2a5a2e"), ("turbines", "#76869a", "outline"), ("mid", "#2e5a3a"),
                            ("far", "#36566a"), ("sun", "#a89858", "outline")], []),
 }
@@ -1316,7 +1433,7 @@ def clock_xml(font):
 
 AUTO = '[CONFIGURATION.auto] == "TRUE"'
 SCHEDULE = [   # Auto scene: (scene, from hour, to hour) - local time, 24h
-    ("meadow", 6, 12), ("dunes", 12, 17), ("lighthouse", 17, 20),
+    ("meadow", 6, 10), ("sky", 10, 14), ("dunes", 14, 17), ("lighthouse", 17, 20),
     ("neon", 20, 23), ("lake", 23, 3), ("frost", 3, 6),
 ]
 
