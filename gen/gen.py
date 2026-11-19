@@ -809,18 +809,6 @@ def blit(dst, src, ax, ay):
     return dst
 
 
-def ring(r, col, alpha):
-    L = Layer(2 * r + 3, 2 * r + 3)
-    for y in range(L.h):
-        for x in range(L.w):
-            if abs(math.hypot(x - r - 1, y - r - 1) - r) < 0.6:
-                L.set(x, y, hexc(col, alpha))
-    return L
-
-
-K6, K1_5 = "1.0472", "4.1888"   # 2*pi/6 s, 2*pi/1.5 s
-
-
 # ================================================================ scene 5: Lighthouse (dusk coast)
 def scene_lighthouse():
     S = Scene("lighthouse", "Lighthouse")
@@ -944,243 +932,7 @@ def scene_lighthouse():
     return S
 
 
-# ================================================================ scene 6: Koi pond (top-down)
-def koi_sprite(body, patch, seed, facing=1):
-    L = Layer(16, 7)
-    rnd = random.Random(seed)
-    for x in range(16):
-        if x >= 3:
-            hh = 2.9 * math.sin(math.pi * (x - 2.5) / 13.5)
-            for y in range(7):
-                if abs(y - 3) <= hh:
-                    L.set(x, y, hexc(body))
-        else:                                            # forked tail
-            for y in (1 + x // 2, 5 - x // 2):
-                L.set(x, y, hexc(body, 200))
-    for _ in range(3):                                   # patches
-        px, py = rnd.randrange(5, 12), rnd.randrange(2, 5)
-        for x, y in disk(px, py, 1):
-            if L.get(x, y):
-                L.set(x, y, hexc(patch))
-    L.set(8, 0, hexc(body, 170))                         # pectoral fins
-    L.set(8, 6, hexc(body, 170))
-    L.set(13, 2, hexc("#101010"))
-    L.set(13, 4, hexc("#101010"))
-    if facing < 0:
-        L.px = [row[::-1] for row in L.px]
-    return L
-
-
-def scene_koi():
-    S = Scene("koi", "Koi pond")
-    S.horizon, S.fog_col = 50, "#c8e0dc"
-    S.wx = {"snow", "fog", "storm", "wind"}   # seen from above: no sky clouds, and rain becomes ripples
-    W = Layer()
-    rnd = random.Random(91)
-    cols = pal("#46a090", "#358a7c", "#287268", "#1d5c58", "#144448")
-    for y in range(G):
-        for x in range(G):
-            d = math.hypot(x - G / 2, y - G / 2 - 4) / (G * 0.62)
-            n = 0.07 * math.sin(x * 0.31 + y * 0.17) + 0.07 * math.sin(x * 0.13 - y * 0.29)
-            W.set(x, y, ramp(cols, d + n, x, y))
-    for _ in range(40):
-        cx, cy, r = rnd.randrange(G), rnd.randrange(G), rnd.randint(1, 2)
-        col = hexc(rnd.choice(["#2a6a5e", "#356e60", "#1e5850"]))
-        for x, y in disk(cx, cy, r):
-            W.set(x, y, col)
-    S.add("water", 3, Img("water", W))
-
-    def caustics(ph):
-        L = Layer()
-        for y in range(G):
-            for x in range(G):
-                if abs(math.sin(x * 0.45 + 2.2 * math.sin(y * 0.21 + ph))) < 0.07:
-                    L.set(x, y, hexc("#9ae8d4", 70))
-        return L
-    S.add("caustics", 4, Img("caustic_a", caustics(0), twinkle(0, 0)),
-          Img("caustic_b", caustics(2.0), twinkle(3.1416, 0), preview=False, calm="hide"))
-
-    # pads (surface) and their shadows on the bottom: different depths, so tilting shows the gap
-    pads, shadow = Layer(), Layer()
-    for cx, cy, r, flower in [(16, 30, 7, True), (86, 28, 6, False), (12, 72, 8, False), (88, 76, 7, True),
-                              (40, 92, 6, False), (70, 94, 5, False)]:
-        for x, y in disk(cx, cy, r):
-            ang = math.atan2(y - cy, x - cx)
-            if abs(ang - 0.6) < 0.28:                    # the notch
-                continue
-            edge = math.hypot(x - cx, y - cy) > r - 1
-            pads.set(x, y, hexc("#6ab85a" if edge else ("#3e8a3a" if (x + y) % 5 else "#357a32")))
-            shadow.set(x + 2, y + 3, hexc("#0a2a28", 90))
-        if flower:
-            for x, y in disk(cx - 2, cy - 1, 2):
-                pads.set(x, y, hexc("#ff9ac8"))
-            pads.set(cx - 3, cy - 2, hexc("#ffd0e8"))
-            pads.set(cx - 2, cy - 1, hexc("#ffe070"))
-    S.add("shadows", 5, Img("shadows", shadow))
-
-    # koi: each is a thin strip, pivoted at the pond centre, rotated round it
-    cx, cy = 225 + PAD, 268 + PAD
-    fish = [("#f4f0e8", "#e04a2a", 92, 1, 20, "0 + {T} * 6"), ("#ff8a2a", "#ffd890", 93, -1, 14, "180 - {T} * 12"),
-            ("#2a2a30", "#f08a3a", 94, 1, 25, "90 + {T} * 18")]
-    imgs, flat = [], Layer()
-    for i, (body, patch, seed, facing, hs, ang) in enumerate(fish):
-        F = Layer(16, hs)
-        blit(F, koi_sprite(body, patch, seed, facing), 0, 0)
-        wob = f"3 * sin({T} * {K1_5} + {i})"
-        imgs.append(Img(f"koi_{i}", F, f'<Transform target="angle" value="{ang.format(T=T)} + {wob}" />',
-                        x=cx - 40, y=cy - hs * PX, attrs=' pivotX="0.5" pivotY="1"'))
-        ax, ay = [(26, 66), (60, 84), (66, 48)][i]          # always-on: spread round the pond, not stacked
-        blit(flat, koi_sprite(body, patch, seed, facing), ax, ay)
-    S.extra["fish"] = flat
-    S.add("koi", 7, *imgs)
-
-    rip = ring(12, "#d8f4ec", 170)
-
-    def ripple(i, x, y, period, ph, **kw):
-        p = f"((({T} + {ph}) % {period}) / {period})"
-        return Img(f"ripple_{i}", rip, f'<Transform target="scaleX" value="0.15 + {p}" />'
-                                       f'<Transform target="scaleY" value="0.15 + {p}" />'
-                                       f'<Transform target="alpha" value="round(230 * (1 - {p}))" />',
-                   x=x, y=y, attrs=' pivotX="0.5" pivotY="0.5"', preview=False, **kw)
-    rnd = random.Random(95)
-    rain = [ripple(f"r{i}", rnd.randrange(80, 380), rnd.randrange(120, 420), 1.5, rnd.random() * 1.5,
-                   only="rain", calm="hide") for i in range(9)]
-    S.add("surface", 18, Img("pads", pads), ripple("a", 300, 330, 4, 0, calm="hide"),
-          ripple("b", 140, 220, 5, 2.5, calm="hide"), *rain)
-
-    petals = Layer()
-    for x, y in ((30, 50), (64, 40), (58, 70), (24, 58)):
-        petals.set(x, y, hexc("#ffb0d4"))
-        petals.set(x + 1, y, hexc("#ff9ac8", 200))
-    S.add("petals", 21, Img("petals", petals, wander(0.7, 14, 10)))
-    return S
-
-
-# ================================================================ scene 7: Deep sea
-def scene_deep():
-    S = Scene("deep", "Deep sea")
-    S.horizon, S.wx = 70, set()   # underwater: no weather
-    W = Layer()
-    for y in range(G):
-        for x in range(G):
-            W.set(x, y, ramp(pal("#4ab0c4", "#2a8aa8", "#1c6a92", "#14507a", "#0e3862", "#08244a", "#041632",
-                                 "#020a1c"), y / (G - 4), x, y))
-    S.add("water", 3, Img("water", W))
-
-    def rays(seed):
-        L, r = Layer(), random.Random(seed)
-        for _ in range(5):
-            x0 = r.randrange(-10, G - 20)
-            for y in range(0, 72):
-                w = 2 + y * 0.07
-                a = int(65 * (1 - y / 72))
-                for x in range(int(x0 + y * 0.35), int(x0 + y * 0.35 + w)):
-                    if a > 4:
-                        L.set(x, y, hexc("#c8f8ff", a))
-        return L
-    S.add("rays", 4, Img("rays_a", rays(111), twinkle(0, 60) + f'<Transform target="x" value="@BX@ + 5 * sin({T} * {K10})" />'),
-          Img("rays_b", rays(112), twinkle(3.1416, 60), preview=False, calm="hide"))
-    S.add("snow", 6, Img("marine_snow", falling(113, 60, 1, hexc("#b8dce8", 110)), fall(1), preview=False))
-
-    S.add("reef", 9, Img("reef", terrain(Layer(), [(4, 0.09, 1.2), (2, 0.23, 0.4), (1, 0.6, 2.0)], 78,
-                                         hexc("#0c2e4a"), rim=hexc("#1c4a6a"))))
-
-    def jelly(bell, inner, glow):
-        L = Layer(11, 15)
-        for x, y in disk(5, 4, 4):
-            if y <= 5:
-                L.set(x, y, hexc(bell, 210))
-        for x in range(2, 9):
-            L.set(x, 4, hexc(inner, 220))
-        L.set(3, 2, hexc("#ffffff", 230))
-        for i, tx in enumerate((2, 4, 6, 8)):
-            for y in range(6, 14 - i % 2):
-                L.set(tx + (1 if (y + i) % 4 < 2 else 0), y, hexc(glow, 150 - (y - 6) * 12))
-        return L
-    jl = []
-    for i, (col, inn, gl, x, y, ph) in enumerate([("#ff8ad8", "#c050b0", "#ffb0ec", 300, 250, 0),
-                                                   ("#8af0ff", "#3aa8c8", "#c0f8ff", 120, 300, 2.3)]):
-        J = jelly(col, inn, gl)
-        jl.append(Img(f"jelly_{i}", J, f'<Transform target="x" value="{x} + 8 * sin({T} * {K15} + {ph})" />'
-                                       f'<Transform target="y" value="{y} + 14 * sin({T} * {K10} + {ph})" />'
-                                       f'<Transform target="scaleY" value="1 + 0.07 * sin({T} * {K3} + {ph})" />',
-                      x=x, y=y, attrs=' pivotX="0.5" pivotY="0"'))
-    S.extra["jellies"] = blit(blit(Layer(), jelly("#ff8ad8", "#c050b0", "#ffb0ec"), 60, 50),
-                              jelly("#8af0ff", "#3aa8c8", "#c0f8ff"), 24, 60)
-    S.add("jellies", 12, *jl)
-
-    school = Layer(32, 9)
-    rnd = random.Random(114)
-    for _ in range(8):
-        fx, fy = rnd.randrange(0, 28), rnd.randrange(0, 8)
-        school.rect(fx + 1, fy, fx + 4, fy + 1, hexc("#c8dce6"))
-        school.set(fx + 4, fy, hexc("#8aa8b8"))   # tail on the right: they swim left
-        school.set(fx + 1, fy, hexc("#e8f4fa"))
-    S.add("school", 14, Img("school", school, f'<Transform target="x" value="560 - ({T} % 30) * 25" />'
-                                              f'<Transform target="y" value="190 + 10 * sin({T} * {K3})" />',
-                            preview=False, calm="hide"))
-
-    def kelp(seed, n):
-        L, r = Layer(20, 62), random.Random(seed)
-        for i in range(n):
-            bx, h = r.randrange(2, 18), r.randrange(34, 60)
-            for y in range(62 - h, 62):
-                x = int(bx + 1.6 * math.sin((62 - y) * 0.22 + i))
-                L.set(x, y, hexc("#1e6a3a"))
-                if y % 4 == 0:
-                    L.set(x + 1, y, hexc("#2e8a48"))
-                    L.set(x + 2, y + 1, hexc("#4aaa5a"))
-        return L
-    kl, kr = kelp(115, 5), kelp(116, 4)
-    S.extra["kelp"] = blit(blit(Layer(), kl, 2, G - 66), kr, 80, G - 66)
-    sway = lambda ph: f'<Transform target="angle" value="3 * sin({T} * {K6} + {ph})" />'
-    S.add("kelp", 18, Img("kelp_l", kl, sway(0), x=2 * PX, y=(G - 66) * PX, attrs=' pivotX="0.5" pivotY="1"'),
-          Img("kelp_r", kr, sway(1.7), x=80 * PX, y=(G - 66) * PX, attrs=' pivotX="0.5" pivotY="1"'))
-
-    FL = terrain(Layer(), [(3, 0.07, 2.0), (1.5, 0.21, 0.6)], 91, hexc("#1a3a4a"), rim=hexc("#2e5a6a"),
-                 shade=hexc("#0a1c28"), span=10)
-    rnd = random.Random(117)
-    for cx, col in ((30, "#c84a7a"), (62, "#d8702a"), (74, "#7a4a9a"), (46, "#c84a7a")):
-        b = int(ridge(cx, [(3, 0.07, 2.0), (1.5, 0.21, 0.6)], 91))
-        for k in range(5):                                # branching coral
-            x, y = cx, b
-            for _ in range(rnd.randint(4, 8)):
-                FL.set(x, y, hexc(col))
-                y -= 1
-                x += rnd.choice((-1, 0, 0, 1)) * (1 if k % 2 else -1)
-    glow = Layer()
-    for _ in range(14):
-        x = rnd.randrange(20, 82)
-        glow.set(x, int(ridge(x, [(3, 0.07, 2.0), (1.5, 0.21, 0.6)], 91)) + rnd.randrange(1, 6), hexc("#7af8ff"))
-    angler = sprite(["....l.....", "...#......", "..##......", ".####.....", "######w###", "#########.",
-                     ".#######..", "..####...."], {"#": hexc("#0c1824"), "w": hexc("#e8f0f0")})
-    lure = Layer()
-    halo(lure, 21, 81, 1, "#a8ffe8", 200, 3)
-    lure.set(21, 81, hexc("#f0fff8"))
-    S.add("floor", 22, Img("floor", FL), Img("biolum", glow, twinkle(1, 40)),
-          Img("angler", angler, x=17 * PX, y=81 * PX), Img("lure", lure, twinkle(0.5, 30)))
-    S.add("bubbles", 26, Img("bubbles", bubbles(118, 22),
-                             f'<Transform target="y" value="-round(({T} * {SIZE * 4 / 60:g}) % {SIZE})" />',
-                             preview=False, calm="hide"))
-    return S
-
-
-def bubbles(seed, n):
-    L = Layer(G, 2 * G)
-    rnd = random.Random(seed)
-    for _ in range(n):
-        x, y, big = rnd.randrange(4, G - 4), rnd.randrange(G), rnd.random() < 0.4
-        for k in (0, G):
-            if big:
-                for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)):
-                    L.set(x + dx, y + k + dy, hexc("#c8f4ff", 170))
-                L.set(x - 1, y + k - 1, hexc("#ffffff", 200))
-            else:
-                L.set(x, y + k, hexc("#c8f4ff", 150))
-    return L
-
-
-# ================================================================ scene 8: Meadow (sunny morning)
+# ================================================================ scene 6: Meadow (sunny morning)
 def scene_meadow():
     S = Scene("meadow", "Meadow")
     HZ = 60
@@ -1352,7 +1104,7 @@ def add_weather(S):
     S.groups = groups + [(n, d, ims) for (n, d), ims in merged.items()]
 
 
-SCENES = [scene_lake, scene_frost, scene_neon, scene_dunes, scene_lighthouse, scene_koi, scene_deep, scene_meadow]
+SCENES = [scene_lake, scene_frost, scene_neon, scene_dunes, scene_lighthouse, scene_meadow]
 
 
 # ================================================================ pixel font
@@ -1523,9 +1275,6 @@ AOD_STYLE = {   # scene -> (clock tint, outline specs nearest-first, extras)
     "lighthouse": ("#ffe6a0", [("cliff", "#35355e"), ("moon", "#8e88b8", "outline"), ("sea", "#2c3462")],
                    [("cliff", lambda c: c[0] > 240 and c[1] > 220 and c[2] < 200, "#b89448", 1),
                     ("stars_a", WHITEISH, "#4a5070", 2)]),
-    "koi": ("#ffb08a", [("pads", "#2e6a3a", "outline"), ("fish", "#9a5838", "outline")], []),
-    "deep": ("#8af0ff", [("kelp", "#1c5a3a", "outline"), ("floor", "#1a4a66"), ("jellies", "#8a4a8a", "outline")],
-             [("biolum", lambda c: True, "#2a8a98", 1)]),
     "meadow": ("#fff0b0", [("near", "#2a5a2e"), ("turbines", "#76869a", "outline"), ("mid", "#2e5a3a"),
                            ("far", "#36566a"), ("sun", "#a89858", "outline")], []),
 }
@@ -1567,7 +1316,7 @@ def clock_xml(font):
 
 AUTO = '[CONFIGURATION.auto] == "TRUE"'
 SCHEDULE = [   # Auto scene: (scene, from hour, to hour) - local time, 24h
-    ("meadow", 5, 8), ("koi", 8, 12), ("deep", 12, 16), ("dunes", 16, 18),
+    ("meadow", 5, 16), ("dunes", 16, 18),
     ("lighthouse", 18, 20), ("neon", 20, 22), ("lake", 22, 2), ("frost", 2, 5),
 ]
 

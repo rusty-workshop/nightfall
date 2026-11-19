@@ -7,27 +7,25 @@ font for the clock. No code inside: it's a Watch Face Format v2 package (XML + P
 | Lake | Aurora | Neon city | Dunes |
 |---|---|---|---|
 | ![](docs/preview_lake.png) | ![](docs/preview_frost.png) | ![](docs/preview_neon.png) | ![](docs/preview_dunes.png) |
-| **Lighthouse** | **Koi pond** | **Deep sea** | **Meadow** |
-| ![](docs/preview_lighthouse.png) | ![](docs/preview_koi.png) | ![](docs/preview_deep.png) | ![](docs/preview_meadow.png) |
+| **Lighthouse** | **Meadow** | | |
+| ![](docs/preview_lighthouse.png) | ![](docs/preview_meadow.png) | | |
 
 - **Lake**: ringed planet over a lake. Twinkling stars, drifting clouds, a shooting star at :00 and :30, water shimmer, fireflies.
 - **Aurora**: northern lights over snowy peaks. Rippling aurora, snow in two depths, a cabin with a flickering window and chimney smoke.
 - **Neon city**: rainy skyline. Rain in two depths, flying cars, windows switching on and off, blinking antennas, a flickering sign.
 - **Dunes**: retro sunset over the desert. Birds, drifting clouds, blowing sand.
 - **Lighthouse**: dusk on the coast. The beam turns in 3D (it stretches, flips sides and flares when it faces you), a boat and gulls pass, waves foam on the rocks.
-- **Koi pond**: seen from above. Koi circle the pond, lily pads cast shadows on the bottom (tilt to see the gap), ripples spread, petals drift.
-- **Deep sea**: light rays sway, jellyfish pulse and bob, kelp sways from its roots, a fish school passes, an anglerfish's lure glows, bubbles rise.
 - **Meadow**: a sunny morning. Two wind turbines turn, a hot-air balloon drifts over, butterflies flutter, grass sways.
 
 ## Options (long-press the face, then Customize)
 
-- **Scene**: pick one of the eight.
-- **Auto scene (time of day)**: ignore the picked scene and follow the clock: Meadow 5-8, Koi 8-12, Deep sea 12-16,
-  Dunes 16-18, Lighthouse 18-20, Neon city 20-22, Lake 22-2, Aurora 2-5. Edit `SCHEDULE` in `gen/gen.py` to change it.
+- **Scene**: pick one of the six.
+- **Auto scene (time of day)**: ignore the picked scene and follow the clock: Meadow 5-16, Dunes 16-18,
+  Lighthouse 18-20, Neon city 20-22, Lake 22-2, Aurora 2-5. Edit `SCHEDULE` in `gen/gen.py` to change it.
 - **Live weather** (on by default): the scene follows the weather on your watch. Clouds roll in when it's cloudy, fog
   sits on the horizon, rain or snow falls, storms flash, and wind blows streaks across. Scenes with weather built in
-  (Neon's rain, Aurora's snow, Dunes' sand) only show it when the real weather matches. In the Koi pond, rain falls as
-  ripples. Deep sea is underwater, so it ignores the weather. With no weather data, every scene looks as designed.
+  (Neon's rain, Aurora's snow, Dunes' sand) only show it when the real weather matches.
+  With no weather data, every scene looks as designed.
 - **Calm (fewer animations)**: keeps the tilt parallax but freezes the looping animations and hides anything that
   travels across the screen. Saves battery while the screen is on.
 
