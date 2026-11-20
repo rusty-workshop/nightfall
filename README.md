@@ -59,10 +59,23 @@ that watches only Samsung's system UI and swaps in Nightfall's screen when one o
 | swipe right | notifications | Nightfall inbox |
 | swipe down | quick panel | Nightfall control panel |
 
-To keep it seamless, Nightfall's screens live in one activity that stays alive in the service's warm process, so
-it comes to the front instantly with no splash screen, sliding in the direction you swiped, straight over
-Samsung's screen. Leaving it presses Home, which resets Samsung's screen underneath to the face. Each swipe can be
-switched off in the control panel; the inbox and panel have buttons to reach Samsung's real versions.
+To make the swap as close to native as an app can get:
+
+- **React to Samsung's first event** for each screen, matched from the event itself where possible (the quick panel
+  announces itself by text, the app list by the id of the view that changed).
+- **A curtain**: a full-screen accessibility overlay (above every app and above Samsung's quick panel), added once
+  up front so showing it costs one frame. It paints a snapshot of the Nightfall screen's last frame, with the clock
+  redrawn live, sliding in the way your finger went.
+- **Underneath**, the always-alive Nightfall activity comes to the front with no animation and no splash; once it
+  has drawn its first frame the curtain disappears, so the hand-off is invisible. For the quick panel, Back is
+  pressed (behind the curtain) until Samsung's panel is really gone before Nightfall's comes up.
+- Leaving presses Home, which resets Samsung's screen underneath to the face.
+
+Measured at 60 fps on a Galaxy Watch 8, Samsung's screen now shows for about 65 ms when swiping up (a 4-frame peek
+at the bottom edge before the drawer slides up over it), about 100 ms when swiping down, and about 170 ms when
+swiping right (Samsung's notification list sends its first event only ~135 ms into the swipe).
+
+Each swipe can be switched off in the control panel; the inbox and panel have buttons to reach Samsung's real versions.
 Measured cost on a Galaxy Watch 8: ~8 MB of memory, ~0.1 s of CPU a minute with the screen off, roughly 0.2-0.5%
 battery a day.
 

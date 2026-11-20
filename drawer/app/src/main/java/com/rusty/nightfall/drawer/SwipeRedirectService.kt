@@ -1,8 +1,8 @@
 package com.rusty.nightfall.drawer
 
 import android.accessibilityservice.AccessibilityService
-import android.app.ActivityOptions
 import android.content.Context
+import android.content.Intent
 import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
@@ -16,37 +16,70 @@ import kotlinx.coroutines.launch
 
 /**
  * Replaces Samsung's screens with Nightfall's, as seamlessly as an app can without root:
- *   swipe up (or Home on the face) -> app list  -> Nightfall drawer   (slides up, over Samsung's list)
- *   swipe right                    -> notifications -> Nightfall inbox (slides in from the left)
- *   swipe down                     -> quick panel   -> Nightfall panel (panel dismissed, ours drops in)
+ *   swipe up (or Home on the face) -> app list      -> Nightfall drawer
+ *   swipe right                    -> notifications -> Nightfall inbox
+ *   swipe down                     -> quick panel   -> Nightfall panel
  *
- * Tricks: the Nightfall host activity stays alive in this same warm process (no splash, no reload); it is launched
- * straight over Samsung's screen with a slide that continues the swipe (no detour to the face first); leaving it
- * presses Home, which resets Samsung's screen underneath to the face. Only Samsung's two system-UI packages are
- * watched, at most every 50 ms, and nothing is checked while the screen is off.
+ * How the swap is hidden:
+ *  1. React to Samsung's *first* event for each screen, matched from the event itself where possible (the quick
+ *     panel announces itself by text; the app list by the id of the view that changed), so there's no extra lookup.
+ *  2. A curtain (an accessibility overlay, above everything incl. the quick panel, added once up front) shows the
+ *     Nightfall screen in the next frame, from a snapshot of its last frame with the clock redrawn live, sliding in
+ *     the way the finger went.
+ *  3. Underneath, the always-alive Nightfall activity comes to the front with no animation; once it has drawn its
+ *     first frame it tells us and the curtain disappears - the two look identical, so the hand-off is invisible.
+ * Leaving presses Home, which resets Samsung's screen underneath to the face. Only Samsung's two system-UI packages
+ * are watched, and nothing is checked while the screen is off.
  */
 class SwipeRedirectService : AccessibilityService() {
     private val power by lazy { getSystemService(PowerManager::class.java) }
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private var curtain: Curtain? = null
     private var lastFire = 0L
+    private var lastRootCheck = 0L
     private var bypassUntil = 0L
     private var bypassSurface: Surface? = null
     /** What Samsung is showing underneath our screen (so leaving knows to reset it), or null. */
     private var underlay: Surface? = null
+    private val curtainTimeout = Runnable { curtain?.hide(); if (qsClosing) { qsClosing = false; afterQs?.invoke(); afterQs = null } }
+    /** Samsung's quick panel is still on screen behind the curtain (it ignores Back while it's sliding in). */
+    private var qsClosing = false
+    private var surfaceReady = false
+    private var qsTries = 0
+    private var afterQs: (() -> Unit)? = null
+    private val closeQs = object : Runnable {
+        override fun run() {
+            if (!qsClosing) return
+            if (!qsOpen() || qsTries++ > 30) {
+                qsClosing = false
+                afterQs?.invoke(); afterQs = null           // only now bring ours up: no stray Back can reach it
+                return
+            }
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            main.postDelayed(this, 50)
+        }
+    }
+
+    /** Whether Samsung's quick panel is on screen, looking at every window (it isn't always the focused one). */
+    private fun qsOpen(): Boolean = runCatching {
+        windows.any { w -> w.root?.let { it.packageName == QS_PKG && it.findAccessibilityNodeInfosByViewId(QS_ID).any { n -> n.isVisibleToUser } } == true }
+    }.getOrDefault(false)
 
     override fun onServiceConnected() {
         instance = this
         AppsCache.warm(this)
+        curtain = Curtain(this).also { it.attach() }
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch { runCatching { Steps.register(this@SwipeRedirectService) } }
     }
 
-    override fun onUnbind(intent: android.content.Intent?): Boolean {
+    override fun onUnbind(intent: Intent?): Boolean {
         if (instance === this) instance = null
+        curtain?.detach(); curtain = null
         return super.onUnbind(intent)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        if (!power.isInteractive) return                       // always-on redraws can't be any of these screens
+        if (!power.isInteractive) { curtain?.hide(); return }      // always-on redraws can't be any of these screens
         val now = SystemClock.uptimeMillis()
         if (now - lastFire < 900) return
         val bypassed = if (now < bypassUntil) bypassSurface else null
@@ -54,11 +87,23 @@ class SwipeRedirectService : AccessibilityService() {
 
         if (pkg == QS_PKG) {
             if (bypassed == Surface.PANEL || !isOn(this, Surface.PANEL)) return
-            val root = rootInActiveWindow ?: return
-            if (root.packageName == QS_PKG && visible(root, QS_ID)) fire(Surface.PANEL, now)
+            if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+            // the panel says so itself ("Quick panel., Page 1 of 4") the moment it starts sliding in
+            val says = event.text.any { it?.contains("Quick panel", ignoreCase = true) == true }
+            if (says || rootInActiveWindow?.let { it.packageName == QS_PKG && visible(it, QS_ID) } == true) fire(Surface.PANEL, now)
             return
         }
         if (pkg != SYSUI) return
+
+        // fast path: the very first event of the app list comes from its tray
+        val src = runCatching { event.source?.viewIdResourceName }.getOrNull()
+        if (src == TRAY || src == APPS_GRID) {
+            if (bypassed != Surface.DRAWER && isOn(this, Surface.DRAWER)) fire(Surface.DRAWER, now)
+            return
+        }
+        // otherwise look (rate-limited: scrolling Samsung's lists sends a stream of events)
+        if (now - lastRootCheck < 40) return
+        lastRootCheck = now
         val root = rootInActiveWindow ?: return
         if (root.packageName != SYSUI) return
         when {
@@ -70,39 +115,59 @@ class SwipeRedirectService : AccessibilityService() {
     private fun visible(root: AccessibilityNodeInfo, id: String) =
         root.findAccessibilityNodeInfosByViewId(id).any { it.isVisibleToUser }
 
+    /** Samsung's notification list exists (it slides in with the finger, so don't wait until it counts as visible). */
     private fun isNotificationList(root: AccessibilityNodeInfo): Boolean {
-        if (!visible(root, NOTIF_LIST) || visible(root, TILE) || visible(root, APPS_GRID)) return false
-        return visible(root, NOTIF_CARD) || root.findAccessibilityNodeInfosByText("notification").isNotEmpty()
+        if (root.findAccessibilityNodeInfosByViewId(NOTIF_LIST).isEmpty()) return false
+        return root.findAccessibilityNodeInfosByViewId(TILE).isEmpty() && root.findAccessibilityNodeInfosByViewId(APPS_GRID).isEmpty()
     }
 
     private fun fire(s: Surface, now: Long) {
         lastFire = now
         Log.i(TAG, "Samsung ${s.name.lowercase()} -> Nightfall")
-        val anim = when (s) {
-            Surface.DRAWER -> R.anim.in_from_bottom
-            Surface.INBOX -> R.anim.in_from_left
-            Surface.PANEL -> R.anim.in_from_top
+        when (s) {   // the curtain goes up in the very next frame, sliding the way the finger went
+            Surface.DRAWER -> curtain?.show(s, 0f, 0.35f)
+            Surface.INBOX -> curtain?.show(s, -1f, 0f)
+            Surface.PANEL -> curtain?.show(s, 0f, -1f)
         }
-        val open = { startActivity(NightfallActivity.intent(this, s), ActivityOptions.makeCustomAnimation(this, anim, R.anim.stay).toBundle()) }
+        main.removeCallbacks(curtainTimeout)
+        main.postDelayed(curtainTimeout, 2000)                     // never leave it up if something goes wrong
+        surfaceReady = false
+        val open = { startActivity(NightfallActivity.intent(this, s).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)) }
         if (s == Surface.PANEL) {
-            // Samsung's quick panel is an overlay above every app, so it has to close first (Back does it; the
-            // "dismiss shade" action doesn't on One UI Watch). Ours drops in right behind it.
+            // Samsung's quick panel is an overlay above every app and ignores Back until it has finished sliding
+            // in, so keep pressing Back (behind the curtain) until it's really gone; ours comes up meanwhile.
             underlay = null
-            performGlobalAction(GLOBAL_ACTION_BACK)
-            main.postDelayed(open, 40)
+            qsClosing = true
+            qsTries = 0
+            afterQs = open
+            main.post(closeQs)
         } else {
             underlay = s
             open()
         }
     }
 
+    /** The Nightfall screen has drawn its first frame behind the curtain: take the curtain down. */
+    private fun shown() {
+        surfaceReady = true
+        maybeLift()
+    }
+
+    /** Lift the curtain only once ours is drawn AND nothing of Samsung's is left on top of it. */
+    private fun maybeLift() {
+        if (!surfaceReady || qsClosing) return
+        main.removeCallbacks(curtainTimeout)
+        main.postDelayed({ curtain?.hide() }, 16)
+    }
+
     /** Leaving a Nightfall screen: if Samsung's list is still underneath, Home resets it to the face. */
     private fun leave(): Boolean {
+        curtain?.hide()
         if (underlay == null) return false
         underlay = null
         bypassUntil = SystemClock.uptimeMillis() + 800
         bypassSurface = null
-        lastFire = SystemClock.uptimeMillis()                  // don't catch Samsung's list on its way out
+        lastFire = SystemClock.uptimeMillis()                      // don't catch Samsung's list on its way out
         performGlobalAction(GLOBAL_ACTION_HOME)
         return true
     }
@@ -126,9 +191,9 @@ class SwipeRedirectService : AccessibilityService() {
         private const val TAG = "NightfallSwipe"
         private const val SYSUI = "com.samsung.android.wearable.sysui"
         private const val QS_PKG = "com.google.android.apps.wearable.systemui"
+        private const val TRAY = "$SYSUI:id/launcher_tray"
         private const val APPS_GRID = "$SYSUI:id/apps_recycler_view"
         private const val NOTIF_LIST = "$SYSUI:id/recycler_view"
-        private const val NOTIF_CARD = "$SYSUI:id/chunk_view"
         private const val TILE = "$SYSUI:id/item_tile"
         private const val QS_ID = "$QS_PKG:id/quick_panel"
 
@@ -136,6 +201,7 @@ class SwipeRedirectService : AccessibilityService() {
 
         fun leaveToFace(): Boolean = instance?.leave() ?: false
         fun openSamsung(s: Surface): Boolean = instance?.openSamsung(s) ?: false
+        fun surfaceShown() { instance?.let { svc -> svc.main.post { svc.shown() } } }
 
         fun isOn(ctx: Context, s: Surface) = prefs(ctx).getBoolean("redirect_${s.name.lowercase()}", true)
         fun setOn(ctx: Context, s: Surface, on: Boolean) = prefs(ctx).edit().putBoolean("redirect_${s.name.lowercase()}", on).apply()

@@ -32,7 +32,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.key
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +52,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -57,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.ScalingLazyListScope
+import androidx.wear.compose.foundation.lazy.ScalingLazyListState
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import kotlinx.coroutines.delay
@@ -71,6 +78,8 @@ enum class Surface { DRAWER, INBOX, PANEL }
  */
 class NightfallActivity : ComponentActivity() {
     private val surface = mutableStateOf(Surface.DRAWER)
+    /** Bumped on every open: each open starts fresh at the top, which is also what the curtain's snapshot shows. */
+    private val openId = mutableIntStateOf(0)
     private val resumes = mutableIntStateOf(0)
     private val askPerms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         lifecycleScope.launch { runCatching { Steps.register(this@NightfallActivity); Where.refresh(this@NightfallActivity) } }
@@ -84,7 +93,7 @@ class NightfallActivity : ComponentActivity() {
             override fun handleOnBackPressed() = leave()
         })
         setContent {
-            Host(surface.value, resumes.intValue, onLeave = ::leave, onLaunch = ::launchApp, onAskPerms = {
+            Host(surface.value, resumes.intValue, openId.intValue, onCapture = ::capture, onLeave = ::leave, onLaunch = ::launchApp, onAskPerms = {
                 askPerms.launch(arrayOf(Manifest.permission.ACTIVITY_RECOGNITION, Manifest.permission.READ_CALENDAR,
                     Manifest.permission.ACCESS_COARSE_LOCATION))
             })
@@ -95,6 +104,7 @@ class NightfallActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         surface.value = surfaceOf(intent)
+        openId.intValue++
     }
 
     override fun onResume() {
@@ -102,6 +112,18 @@ class NightfallActivity : ComponentActivity() {
         resumes.intValue++
         AppsCache.warm(this)
         lifecycleScope.launch { runCatching { Where.refresh(this@NightfallActivity) } }
+    }
+
+    /** Grab this screen's current frame as the curtain's snapshot for next time (it's at rest, at the top). */
+    private fun capture(s: Surface, clock: android.graphics.RectF) {
+        val v = window.decorView
+        if (v.width == 0 || v.height == 0 || !hasWindowFocus()) return
+        val bmp = android.graphics.Bitmap.createBitmap(v.width, v.height, android.graphics.Bitmap.Config.ARGB_8888)
+        runCatching {
+            android.view.PixelCopy.request(window, bmp, { result ->
+                if (result == android.view.PixelCopy.SUCCESS) Snapshots.put(this, s, Snap(bmp, SceneState.current(this).key, clock, clock.height() / 8f))
+            }, android.os.Handler(mainLooper))
+        }
     }
 
     fun leave() {
@@ -123,8 +145,12 @@ class NightfallActivity : ComponentActivity() {
     }
 }
 
+private val LocalListState = compositionLocalOf<ScalingLazyListState?> { null }
+private val LocalClockSink = compositionLocalOf<(android.graphics.RectF) -> Unit> { {} }
+
 @Composable
-private fun Host(surface: Surface, resumes: Int, onLeave: () -> Unit, onLaunch: (AppEntry) -> Unit, onAskPerms: () -> Unit) {
+private fun Host(surface: Surface, resumes: Int, openId: Int, onCapture: (Surface, android.graphics.RectF) -> Unit,
+                 onLeave: () -> Unit, onLaunch: (AppEntry) -> Unit, onAskPerms: () -> Unit) {
     val ctx = LocalContext.current
     var sceneChoice by remember { mutableStateOf(SceneState.choice(ctx)) }
     var now by remember { mutableStateOf(Calendar.getInstance()) }
@@ -164,14 +190,30 @@ private fun Host(surface: Surface, resumes: Int, onLeave: () -> Unit, onLaunch: 
                     )
                 }
         ) {
-            when (surface) {
-                Surface.DRAWER -> DrawerScreen(tint, scene.label, sceneChoice, now, onLaunch) {
-                    val keys = listOf("auto") + Scenes.all.map { it.key }
-                    sceneChoice = keys[(keys.indexOf(sceneChoice) + 1) % keys.size]
-                    prefs(ctx).edit().putString("scene", sceneChoice).apply()
+            key(openId, surface) {
+                val listState = rememberScalingLazyListState()
+                var clockRect by remember { mutableStateOf<android.graphics.RectF?>(null) }
+                CompositionLocalProvider(LocalListState provides listState, LocalClockSink provides { clockRect = it }) {
+                    when (surface) {
+                        Surface.DRAWER -> DrawerScreen(tint, scene.label, sceneChoice, now, onLaunch) {
+                            val keys = listOf("auto") + Scenes.all.map { it.key }
+                            sceneChoice = keys[(keys.indexOf(sceneChoice) + 1) % keys.size]
+                            prefs(ctx).edit().putString("scene", sceneChoice).apply()
+                        }
+                        Surface.INBOX -> InboxScreen(tint, now)
+                        Surface.PANEL -> PanelScreen(tint, now, resumes, onAskPerms)
+                    }
                 }
-                Surface.INBOX -> InboxScreen(tint, now)
-                Surface.PANEL -> PanelScreen(tint, now, resumes, onAskPerms)
+                LaunchedEffect(Unit) {
+                    // two frames after this open is composed it's on screen: the curtain can go
+                    withFrameNanos { }; withFrameNanos { }
+                    SwipeRedirectService.surfaceShown()
+                    // at rest and still at the top a moment later: that's the snapshot for next time
+                    delay(500)
+                    val r = clockRect
+                    if (r != null && !listState.isScrollInProgress && listState.centerItemIndex == 1 &&
+                        listState.centerItemScrollOffset == 0 && offset.value == 0f) onCapture(surface, r)
+                }
             }
         }
     }
@@ -180,12 +222,16 @@ private fun Host(surface: Surface, resumes: Int, onLeave: () -> Unit, onLaunch: 
 @Composable
 private fun Clock(now: Calendar, px: Float = 3f) {
     val h = now.get(Calendar.HOUR).let { if (it == 0) 12 else it }
-    PixelText("%d:%02d".format(h, now.get(Calendar.MINUTE)), px.dp)
+    val sink = LocalClockSink.current
+    PixelText("%d:%02d".format(h, now.get(Calendar.MINUTE)), px.dp, modifier = Modifier.onGloballyPositioned {
+        val b = it.boundsInWindow()
+        sink(android.graphics.RectF(b.left, b.top, b.right, b.bottom))
+    })
 }
 
 @Composable
 private fun Screen(content: ScalingLazyListScope.() -> Unit) {
-    val state = rememberScalingLazyListState()
+    val state = LocalListState.current ?: rememberScalingLazyListState()
     ScalingLazyColumn(
         state = state,
         modifier = Modifier.fillMaxSize(),
