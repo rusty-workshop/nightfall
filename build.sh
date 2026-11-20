@@ -16,11 +16,18 @@ KS="${KEYSTORE:-$HOME/.android/debug.keystore}"
 
 watch_serial() {
     if [[ -n "${ADB_SERIAL:-}" ]]; then echo "$ADB_SERIAL"; return; fi
-    local s
-    for s in $(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }'); do
-        if [[ "$(adb -s "$s" shell getprop ro.build.characteristics 2>/dev/null)" == *watch* ]]; then
-            echo "$s"; return
-        fi
+    local s try
+    for try in 1 2 3; do
+        # watches drop Wi-Fi debugging when idle: nudge offline wireless devices back before checking
+        for s in $(adb devices | awk 'NR > 1 && $2 == "offline" { print $1 }'); do
+            adb disconnect "$s" >/dev/null 2>&1; timeout 8 adb connect "$s" >/dev/null 2>&1 || true
+        done
+        for s in $(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }'); do
+            if [[ "$(adb -s "$s" shell pm has-feature android.hardware.type.watch 2>/dev/null | tr -d '\r')" == "true" ]]; then
+                echo "$s"; return
+            fi
+        done
+        sleep 2
     done
     echo "no watch connected over adb (other devices are ignored) - turn on wireless debugging on the watch" >&2
     return 1

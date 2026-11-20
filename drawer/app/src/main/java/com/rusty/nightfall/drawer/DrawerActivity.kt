@@ -58,6 +58,11 @@ class DrawerActivity : ComponentActivity() {
         setContent { Drawer(onLaunch = ::launch) }
     }
 
+    override fun onStop() {
+        super.onStop()
+        finish()   // don't linger in the background once you've left (screen off, home, an app opened)
+    }
+
     private fun launch(app: AppEntry) {
         startActivity(
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(app.component)
@@ -173,7 +178,27 @@ fun Drawer(onLaunch: (AppEntry) -> Unit) {
                     item { PixelText("ALL APPS", 1.5.dp, color = tint) }
                 }
                 items(list.chunked(3)) { row -> AppRow(row, pinned, onLaunch, togglePin) }
-                item { PixelText("HOLD TO PIN", 1.dp, color = Color(0x99FFFFFF), modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)) }
+                item { PixelText("HOLD TO PIN", 1.dp, color = Color(0x99FFFFFF), modifier = Modifier.padding(top = 4.dp)) }
+                item {
+                    // swipe-up redirect: on/off here; if the accessibility service isn't enabled yet, open its settings
+                    val serviceOn = remember { SwipeRedirectService.isServiceEnabled(ctx) }
+                    var redirect by remember { mutableStateOf(SwipeRedirectService.isRedirectOn(ctx)) }
+                    val label = when {
+                        !serviceOn -> "SWIPE UP: SET UP"
+                        redirect -> "SWIPE UP: ON"
+                        else -> "SWIPE UP: OFF"
+                    }
+                    PixelText(label, 1.5.dp, color = if (serviceOn && redirect) tint else Color(0xCCFFFFFF),
+                        modifier = Modifier.combinedClickable(onClick = {
+                            if (!serviceOn) {
+                                ctx.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            } else {
+                                redirect = !redirect
+                                SwipeRedirectService.setRedirectOn(ctx, redirect)
+                            }
+                        }).padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 28.dp))
+                }
             }
         }
     }

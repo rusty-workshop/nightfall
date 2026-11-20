@@ -45,6 +45,14 @@ the same schedule as Auto scene, or tap the scene name to pin one). Long-press a
 Open it with the side button: on the watch, **Settings > Advanced features > Customize buttons > Double press**,
 then pick **Nightfall Drawer**.
 
+**Swipe up for the drawer (optional):** Samsung's swipe-up app list can't be remapped without root, so the drawer
+includes a small accessibility service, *Nightfall swipe-up*. It watches only Samsung's system UI for the app list
+appearing, then sends the watch home and opens the drawer instead. Turn it on in **Settings > Accessibility >
+Installed apps > Nightfall swipe-up** (or tap **SWIPE UP: SET UP** at the bottom of the drawer); after that, the same
+row toggles it **ON / OFF**. Samsung's list may flash for a moment before the drawer replaces it. Measured cost on a
+Galaxy Watch 8: about 8 MB of memory and ~0.1 s of CPU per minute with the screen off (it only reacts while the
+watch is already awake redrawing the always-on display), so roughly 0.2-0.5% battery a day.
+
 ```bash
 ./build.sh drawer     # builds drawer/ with Gradle and installs it on the watch
 ```
