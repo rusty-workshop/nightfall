@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Swipe up on the face: the drawer keeps travelling the way your finger was going. -->
+<translate xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fromYDelta="35%p" android:toYDelta="0" android:duration="180"
+    android:interpolator="@android:interpolator/decelerate_cubic" />

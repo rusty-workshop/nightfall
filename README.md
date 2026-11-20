@@ -36,22 +36,54 @@ Always-on: each scene has dim line art of its own landscape with a dot-matrix cl
 
 ![](docs/aod_lake.png) ![](docs/aod_neon.png)
 
-## Nightfall Drawer (`drawer/`)
+## The Nightfall app (`drawer/`)
 
-A pixel-art app drawer to match the face. Every app's icon is redrawn at 20x20 and scaled back up crisp, so all
-icons share the same pixel style; labels use the face's pixel font; the background is the current scene (following
-the same schedule as Auto scene, or tap the scene name to pin one). Long-press an app to pin it to the top.
+A companion Wear OS app that themes the rest of the watch to match the face: pixel font, the current scene as the
+background (following the same schedule as Auto scene, or pinned from the drawer).
 
-Open it with the side button: on the watch, **Settings > Advanced features > Customize buttons > Double press**,
-then pick **Nightfall Drawer**.
+- **Drawer**: every app's icon redrawn as pixel art, pixel labels; long-press to pin. Tap the scene name to change scene.
+- **Inbox**: your notifications as pixel cards with pixel app icons. Tap to open, hold to dismiss, CLEAR ALL.
+- **Control panel**: Do Not Disturb, a flashlight, brightness, Wi-Fi / Bluetooth / Settings shortcuts, a
+  "Samsung" button for the real quick panel, and on/off switches for each swipe.
+- **Tiles**: *Day* (date, steps, battery, next calendar event), *Weather* (now + the next hours, Open-Meteo),
+  *Music* (what's playing on the watch, with controls), *Flick* (pick the preset your watch beams).
 
-**Swipe up for the drawer (optional):** Samsung's swipe-up app list can't be remapped without root, so the drawer
-includes a small accessibility service, *Nightfall swipe-up*. It watches only Samsung's system UI for the app list
-appearing, then sends the watch home and opens the drawer instead. Turn it on in **Settings > Accessibility >
-Installed apps > Nightfall swipe-up** (or tap **SWIPE UP: SET UP** at the bottom of the drawer); after that, the same
-row toggles it **ON / OFF**. Samsung's list may flash for a moment before the drawer replaces it. Measured cost on a
-Galaxy Watch 8: about 8 MB of memory and ~0.1 s of CPU per minute with the screen off (it only reacts while the
-watch is already awake redrawing the always-on display), so roughly 0.2-0.5% battery a day.
+### Swipes (optional)
+
+Samsung's own screens can't be replaced without root, so the app has an accessibility service, *Nightfall swipes*,
+that watches only Samsung's system UI and swaps in Nightfall's screen when one of these appears:
+
+| Gesture on the face | Samsung's screen | Becomes |
+|---|---|---|
+| swipe up (or Home) | app list | Nightfall drawer |
+| swipe right | notifications | Nightfall inbox |
+| swipe down | quick panel | Nightfall control panel |
+
+To keep it seamless, Nightfall's screens live in one activity that stays alive in the service's warm process, so
+it comes to the front instantly with no splash screen, sliding in the direction you swiped, straight over
+Samsung's screen. Leaving it presses Home, which resets Samsung's screen underneath to the face. Each swipe can be
+switched off in the control panel; the inbox and panel have buttons to reach Samsung's real versions.
+Measured cost on a Galaxy Watch 8: ~8 MB of memory, ~0.1 s of CPU a minute with the screen off, roughly 0.2-0.5%
+battery a day.
+
+### One-time setup (on the watch, or adb for the two special permissions)
+
+1. **Swipes**: Settings > Accessibility > Installed apps > *Nightfall swipes* > On.
+2. **Tiles**: open the control panel, tap **TILES: ALLOW ACCESS** (steps, calendar, approximate location).
+3. **Inbox, DND and the Music tile** need notification access. Wear OS has no screen for it, so grant it once with:
+   ```bash
+   adb shell cmd notification allow_listener com.rusty.nightfall.drawer/com.rusty.nightfall.drawer.NotifListener
+   ```
+4. **Brightness** needs "modify system settings":
+   ```bash
+   adb shell appops set com.rusty.nightfall.drawer WRITE_SETTINGS allow
+   ```
+5. Add the tiles: long-press the tiles screen, then **Add** the Nightfall tiles.
+6. For the side button: Settings > Advanced features > Customize buttons > Double press > **Nightfall Drawer**.
+
+The Weather tile sends only an approximate location (rounded to about 10 km) to api.open-meteo.com, and only uses a
+location saved while a Nightfall screen is open. The Flick tile needs Flick built with the same signing key
+(it reads presets through Flick's signature-protected provider).
 
 ```bash
 ./build.sh drawer     # builds drawer/ with Gradle and installs it on the watch

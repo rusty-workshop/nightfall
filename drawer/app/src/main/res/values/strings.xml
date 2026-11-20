@@ -1,5 +1,10 @@
 <resources>
-    <string name="app_name">Nightfall Drawer</string>
-    <string name="a11y_name">Nightfall swipe-up</string>
-    <string name="a11y_desc">Opens Nightfall Drawer instead of the Samsung app list when you swipe up on the watch face. It only watches for the app list appearing and reads nothing else. Turn it off any time from the bottom of the drawer.</string>
+    <string name="app_name">Nightfall</string>
+    <string name="drawer_name">Nightfall Drawer</string>
+    <string name="a11y_name">Nightfall swipes</string>
+    <string name="a11y_desc">Opens Nightfall\'s screens instead of Samsung\'s: the drawer when you swipe up (or press Home on the face), the notification inbox when you swipe right, and the control panel when you swipe down. It only watches for those screens appearing and reads nothing else. Each one can be switched off in the Nightfall control panel.</string>
+    <string name="tile_day">Nightfall: Day</string>
+    <string name="tile_weather">Nightfall: Weather</string>
+    <string name="tile_music">Nightfall: Music</string>
+    <string name="tile_flick">Nightfall: Flick</string>
 </resources>

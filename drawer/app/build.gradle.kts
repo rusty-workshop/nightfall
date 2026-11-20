@@ -46,4 +46,11 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.wear.compose.foundation)
     implementation(libs.wear.compose.material)
+    implementation(libs.wear.tiles)
+    implementation(libs.wear.protolayout)
+    implementation(libs.wear.protolayout.expression)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.guava)
+    implementation(libs.guava)
+    implementation(libs.health.services)
 }

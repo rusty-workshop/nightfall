@@ -61,10 +61,75 @@ object PixelFont {
         '/' to listOf("....#", "...#.", "...#.", "..#..", ".#...", ".#...", "#...."),
         '%' to listOf("##...", "##..#", "...#.", "..#..", ".#...", "#..##", "...##"),
         '&' to listOf(".##..", "#..#.", ".##..", ".#...", "#.#.#", "#..#.", ".##.#"),
+        ',' to listOf("..", "..", "..", "..", "..", ".#", "#."),
+        '(' to listOf(".#", "#.", "#.", "#.", "#.", "#.", ".#"),
+        ')' to listOf("#.", ".#", ".#", ".#", ".#", ".#", "#."),
+        '°' to listOf("###", "#.#", "###", "...", "...", "...", "..."),
+        '<' to listOf("...#", "..#.", ".#..", "#...", ".#..", "..#.", "...#"),
+        '>' to listOf("#...", ".#..", "..#.", "...#", "..#.", ".#..", "#..."),
     )
 
     /** Upper-cased glyphs for [text]; characters the font doesn't have are dropped. */
     fun glyphsFor(text: String): List<List<String>> = text.uppercase().mapNotNull { glyphs[it] }
+
+    /** Free text (notifications, track names) -> what the font can draw: accents stripped, quotes folded, upper case. */
+    fun normalize(text: String): String {
+        val plain = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+        return plain.map {
+            when (it) {
+                '’', '‘', '`', '"', '“', '”' -> '\''
+                '—', '–', '_' -> '-'
+                '\n', '\t' -> ' '
+                else -> it
+            }
+        }.joinToString("").uppercase().filter { glyphs.containsKey(it) }.replace(Regex(" +"), " ").trim()
+    }
+
+    /** Word-wrap [text] (already normalized) into lines of at most [maxCols] font pixels; the last line gets "..." if cut. */
+    fun wrap(text: String, maxCols: Int, maxLines: Int): List<String> {
+        val lines = mutableListOf<String>()
+        var cur = ""
+        fun fits(s: String) = width(glyphsFor(s)) <= maxCols
+        for (word0 in text.split(' ')) {
+            var word = word0
+            while (!fits(word) && word.length > 1) {          // a word too long for a line: hard-split it
+                var cut = word.length - 1
+                while (cut > 1 && !fits(word.take(cut))) cut--
+                if (cur.isNotEmpty()) { lines += cur; cur = "" }
+                lines += word.take(cut); word = word.drop(cut)
+            }
+            val next = if (cur.isEmpty()) word else "$cur $word"
+            if (fits(next)) cur = next else { lines += cur; cur = word }
+        }
+        if (cur.isNotEmpty()) lines += cur
+        if (lines.size <= maxLines) return lines
+        val kept = lines.take(maxLines).toMutableList()
+        var last = kept.last()
+        while (last.isNotEmpty() && !fits("$last...")) last = last.dropLast(1)
+        kept[kept.lastIndex] = "${last.trimEnd()}..."
+        return kept
+    }
+
+    /** Render [text] to a bitmap, [p] device pixels per font pixel, with an optional hard shadow one pixel down. */
+    fun bitmap(text: String, p: Int, color: Int, shadow: Int? = 0xD014062A.toInt()): android.graphics.Bitmap {
+        val gs = glyphsFor(text)
+        val cols = width(gs).coerceAtLeast(1)
+        val b = android.graphics.Bitmap.createBitmap(cols * p, 8 * p, android.graphics.Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(b)
+        val paint = android.graphics.Paint()
+        for ((dy, col) in listOfNotNull(shadow?.let { 1 to it }, 0 to color)) {
+            paint.color = col
+            var x0 = 0
+            for (g in gs) {
+                for (y in g.indices) for (x in g[y].indices) {
+                    if (g[y][x] == '#') c.drawRect(((x0 + x) * p).toFloat(), ((y + dy) * p).toFloat(),
+                        ((x0 + x + 1) * p).toFloat(), ((y + dy + 1) * p).toFloat(), paint)
+                }
+                x0 += g[0].length + 1
+            }
+        }
+        return b
+    }
 
     /** Width in font pixels, including the 1px gap between glyphs. */
     fun width(gs: List<List<String>>): Int = (gs.sumOf { it[0].length + 1 } - 1).coerceAtLeast(0)
@@ -102,6 +167,42 @@ fun PixelText(
                     if (g[y][x] == '#') drawRect(c, Offset((x0 + x) * p, (y + dy) * p), cell)
                 }
                 x0 += g[0].length + 1
+            }
+        }
+    }
+}
+
+/** Several lines of wrapped pixel text. [text] is normalized first, so any string is safe to pass. */
+@Composable
+fun PixelParagraph(
+    text: String,
+    px: Dp,
+    maxCols: Int,
+    maxLines: Int,
+    modifier: Modifier = Modifier,
+    color: Color = Color.White,
+    center: Boolean = false,
+) {
+    val lines = remember(text, maxCols, maxLines) { PixelFont.wrap(PixelFont.normalize(text), maxCols, maxLines) }
+    androidx.compose.foundation.layout.Column(
+        modifier,
+        horizontalAlignment = if (center) androidx.compose.ui.Alignment.CenterHorizontally else androidx.compose.ui.Alignment.Start,
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(px),
+    ) {
+        for (l in lines) PixelText(l, px, color = color)
+    }
+}
+
+/** A small pixel-art icon: '#' in [color], '+' in [accent]. */
+@Composable
+fun PixelIcon(grid: List<String>, px: Dp, color: Color = Color.White, accent: Color = color, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(px * grid[0].length, px * grid.size)) {
+        val p = px.toPx()
+        val cell = Size(p + 0.5f, p + 0.5f)
+        for (y in grid.indices) for (x in grid[y].indices) {
+            when (grid[y][x]) {
+                '#' -> drawRect(color, Offset(x * p, y * p), cell)
+                '+' -> drawRect(accent, Offset(x * p, y * p), cell)
             }
         }
     }
