@@ -36,11 +36,25 @@ Always-on: each scene has dim line art of its own landscape with a dot-matrix cl
 
 ![](docs/aod_lake.png) ![](docs/aod_neon.png)
 
+## Nightfall Drawer (`drawer/`)
+
+A pixel-art app drawer to match the face. Every app's icon is redrawn at 20x20 and scaled back up crisp, so all
+icons share the same pixel style; labels use the face's pixel font; the background is the current scene (following
+the same schedule as Auto scene, or tap the scene name to pin one). Long-press an app to pin it to the top.
+
+Open it with the side button: on the watch, **Settings > Advanced features > Customize buttons > Double press**,
+then pick **Nightfall Drawer**.
+
+```bash
+./build.sh drawer     # builds drawer/ with Gradle and installs it on the watch
+```
+
 ## Build / install
 
 ```bash
 ./build.sh            # generates the art + watchface.xml, builds and signs out/nightfall.apk
-./build.sh install    # ...and adb installs it (connect the watch over wireless debugging first)
+./build.sh install    # ...and installs it on the watch (connect it over wireless debugging first;
+                      #    other adb devices like phones or TVs are ignored)
 ```
 
 Then long-press the current face on the watch and pick **Nightfall**.

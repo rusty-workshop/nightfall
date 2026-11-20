@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Builds Nightfall.apk (Watch Face Format, resources only) with plain SDK tools - no Gradle.
-#   ./build.sh            generate art + build + sign  -> out/nightfall.apk
-#   ./build.sh install    ...then adb install to the connected watch
+# Builds Nightfall with plain SDK tools.
+#   ./build.sh            generate art + build + sign the watch face  -> out/nightfall.apk
+#   ./build.sh install    ...then install it on the watch
+#   ./build.sh drawer     generate art + build Nightfall Drawer (Gradle) and install it on the watch
+# Installs only ever go to a watch: other adb devices (phones, TVs) are skipped. Set ADB_SERIAL to pick one.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -12,7 +14,28 @@ export JAVA_HOME="${JAVA_HOME:-$(ls -d "$HOME"/.local/share/jdk/jdk-* 2>/dev/nul
 export PATH="$JAVA_HOME/bin:$PATH"
 KS="${KEYSTORE:-$HOME/.android/debug.keystore}"
 
+watch_serial() {
+    if [[ -n "${ADB_SERIAL:-}" ]]; then echo "$ADB_SERIAL"; return; fi
+    local s
+    for s in $(adb devices | awk 'NR > 1 && $2 == "device" { print $1 }'); do
+        if [[ "$(adb -s "$s" shell getprop ro.build.characteristics 2>/dev/null)" == *watch* ]]; then
+            echo "$s"; return
+        fi
+    done
+    echo "no watch connected over adb (other devices are ignored) - turn on wireless debugging on the watch" >&2
+    return 1
+}
+
 python3 gen/gen.py
+
+if [[ "${1:-}" == "drawer" ]]; then
+    serial="$(watch_serial)"
+    (cd drawer && ./gradlew -q :app:assembleRelease)
+    adb -s "$serial" install -r drawer/app/build/outputs/apk/release/app-release.apk
+    echo "installed Nightfall Drawer on $serial"
+    exit 0
+fi
+
 rm -rf out/build && mkdir -p out/build
 "$BT/aapt2" compile --dir res -o out/build/res.zip
 "$BT/aapt2" link -I "$JAR" --manifest AndroidManifest.xml -o out/build/unsigned.apk out/build/res.zip
@@ -23,6 +46,7 @@ rm -rf out/build && mkdir -p out/build
 echo "built out/nightfall.apk ($(du -h out/nightfall.apk | cut -f1))"
 
 if [[ "${1:-}" == "install" ]]; then
-    adb install -r out/nightfall.apk
-    echo "installed - long-press the watch face and pick Nightfall"
+    serial="$(watch_serial)"
+    adb -s "$serial" install -r out/nightfall.apk
+    echo "installed on $serial - long-press the watch face and pick Nightfall"
 fi
