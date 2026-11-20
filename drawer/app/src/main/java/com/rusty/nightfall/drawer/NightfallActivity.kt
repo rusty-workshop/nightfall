@@ -348,7 +348,7 @@ private fun InboxScreen(tint: Color, now: Calendar) {
         if (items.any { it.clearable }) item { PixelButtonText("CLEAR ALL", tint) { NotifListener.dismissAll() } }
         if (items.isNotEmpty()) item { PixelText("HOLD TO DISMISS", 1.dp, color = Color(0x99FFFFFF)) }
         item {
-            PixelButtonText("SAMSUNG'S VIEW", Color(0xCCFFFFFF), 1.25f) { SwipeRedirectService.openSamsung(Surface.INBOX) }
+            PixelButtonText("SAMSUNG'S VIEW", Color(0xCCFFFFFF), 1.25f) { SwipeRedirectService.openSamsung(Surface.INBOX, ctx as Activity) }
         }
         item { Spacer(Modifier.height(24.dp)) }
     }
@@ -413,7 +413,7 @@ private fun PanelScreen(tint: Color, now: Calendar, resumes: Int, onAskPerms: ()
                     if (NotifListener.setDnd(!dnd)) dnd = !dnd
                 }
                 PanelTile(Icons.TORCH, "TORCH", tint) { ctx.startActivity(Intent(ctx, FlashlightActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                PanelTile(Icons.PANEL, "SAMSUNG", tint) { SwipeRedirectService.openSamsung(Surface.PANEL) }
+                PanelTile(Icons.PANEL, "SAMSUNG", tint) { SwipeRedirectService.openSamsung(Surface.PANEL, ctx as Activity) }
             }
         }
         item {

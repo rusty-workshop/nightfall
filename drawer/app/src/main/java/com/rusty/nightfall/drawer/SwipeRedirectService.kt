@@ -84,6 +84,8 @@ class SwipeRedirectService : AccessibilityService() {
         if (now - lastFire < 900) return
         val bypassed = if (now < bypassUntil) bypassSurface else null
         val pkg = event.packageName?.toString() ?: return
+        // while you're using Samsung's own screen (via the "Samsung" buttons), keep letting it through
+        if (bypassed != null) bypassUntil = now + 3000
 
         if (pkg == QS_PKG) {
             if (bypassed == Surface.PANEL || !isOn(this, Surface.PANEL)) return
@@ -172,17 +174,32 @@ class SwipeRedirectService : AccessibilityService() {
         return true
     }
 
-    /** "Samsung's version" buttons: let the real screen through for a few seconds. */
-    private fun openSamsung(s: Surface): Boolean {
-        val action = when (s) {
-            Surface.PANEL -> GLOBAL_ACTION_QUICK_SETTINGS
-            Surface.INBOX -> GLOBAL_ACTION_NOTIFICATIONS
-            Surface.DRAWER -> return false
-        }
+    /**
+     * "Samsung" buttons. One UI Watch ignores the accessibility "open quick settings / notifications" actions, so:
+     * step aside, and if Samsung's screen isn't already sitting underneath us, swipe for it for real.
+     */
+    private fun openSamsung(s: Surface, host: android.app.Activity): Boolean {
+        if (s == Surface.DRAWER) return false
+        val alreadyUnder = underlay == s                    // we came in over it: it's right there underneath
         bypassSurface = s
-        bypassUntil = SystemClock.uptimeMillis() + 8000
+        bypassUntil = SystemClock.uptimeMillis() + 3000
         underlay = null
-        return performGlobalAction(action)
+        curtain?.hide()
+        host.moveTaskToBack(true)
+        if (!alreadyUnder) main.postDelayed({ swipeFor(s) }, 350)
+        return true
+    }
+
+    private fun swipeFor(s: Surface) {
+        bypassUntil = SystemClock.uptimeMillis() + 3000
+        val dm = resources.displayMetrics
+        val w = dm.widthPixels.toFloat(); val h = dm.heightPixels.toFloat()
+        val path = android.graphics.Path().apply {
+            if (s == Surface.PANEL) { moveTo(w / 2, 1f); lineTo(w / 2, h * 0.75f) }     // down from the top edge
+            else { moveTo(2f, h / 2); lineTo(w * 0.85f, h / 2) }                        // right from the left edge
+        }
+        dispatchGesture(android.accessibilityservice.GestureDescription.Builder()
+            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 260)).build(), null, null)
     }
 
     override fun onInterrupt() {}
@@ -200,7 +217,7 @@ class SwipeRedirectService : AccessibilityService() {
         @Volatile private var instance: SwipeRedirectService? = null
 
         fun leaveToFace(): Boolean = instance?.leave() ?: false
-        fun openSamsung(s: Surface): Boolean = instance?.openSamsung(s) ?: false
+        fun openSamsung(s: Surface, host: android.app.Activity): Boolean = instance?.openSamsung(s, host) ?: false
         fun surfaceShown() { instance?.let { svc -> svc.main.post { svc.shown() } } }
 
         fun isOn(ctx: Context, s: Surface) = prefs(ctx).getBoolean("redirect_${s.name.lowercase()}", true)
